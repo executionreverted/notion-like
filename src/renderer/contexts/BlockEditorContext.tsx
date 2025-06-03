@@ -3,14 +3,13 @@ import { useState, useRef, useEffect, createContext, useContext } from 'react';
 // Context for managing editor state
 export const BlockEditorContext = createContext(null);
 
-
 export const BlockEditorProvider = ({ children }) => {
   const [blocks, setBlocks] = useState([
     { id: '1', type: 'heading', content: 'Transform Your Writing Experience' },
     { id: '2', type: 'text', content: 'This is what professional editing feels like. Click on any block and watch the smooth auto-resize textareas that adapt naturally to your content. No more jarring fixed-height boxes or clunky interfaces - just pure, seamless editing bliss.' },
     { id: '3', type: 'quote', content: 'Great design is invisible - it gets out of your way and lets you focus on what matters: creating amazing content.' },
-    { id: '4', type: 'list', content: '• Seamless auto-resize textareas that feel natural\n• Professional design with modern gradients\n• Smooth animations and micro-interactions\n• Intuitive keyboard shortcuts (try Escape, Ctrl+Enter)\n• Clean, accessible interface with perfect spacing\n• Slash commands for quick block creation' },
-    { id: '5', type: 'code', content: 'const editor = new ProfessionalBlockEditor();\neditor.enableSeamlessEditing();\neditor.render(); // ✨ Pure magic\n\n// Try editing this code block!\n// Notice how it grows smoothly as you type\n// This is how editing should feel in 2024' },
+    { id: '4', type: 'list', content: '• Seamless auto-resize textareas that feel natural\n• Professional design with modern gradients\n• Smooth animations and micro-interactions\n• Intuitive keyboard shortcuts (try Escape, Ctrl+Enter)\n• Clean, accessible interface with perfect spacing\n• Slash commands for quick block creation\n• Drag and drop to reorder blocks' },
+    { id: '5', type: 'code', content: 'const editor = new ProfessionalBlockEditor();\neditor.enableSeamlessEditing();\neditor.enableDragAndDrop();\neditor.render(); // ✨ Pure magic\n\n// Try editing this code block!\n// Notice how it grows smoothly as you type\n// You can also drag blocks to reorder them!\n// This is how editing should feel in 2024' },
   ]);
 
   const [title, setTitle] = useState('Professional Block Editor');
@@ -67,6 +66,27 @@ export const BlockEditorProvider = ({ children }) => {
     setBlocks(newBlocks);
   };
 
+  // New function for drag and drop repositioning
+  const moveBlockToPosition = (blockId, newIndex) => {
+    const currentIndex = blocks.findIndex(block => block.id === blockId);
+    if (currentIndex === -1) return;
+
+    // Clamp the new index to valid bounds
+    const clampedIndex = Math.max(0, Math.min(newIndex, blocks.length));
+
+    // If trying to move to the same position, do nothing
+    if (currentIndex === clampedIndex || currentIndex === clampedIndex - 1) return;
+
+    const newBlocks = [...blocks];
+    const [movedBlock] = newBlocks.splice(currentIndex, 1);
+
+    // Adjust insert position if we removed an item before it
+    const insertIndex = currentIndex < clampedIndex ? clampedIndex - 1 : clampedIndex;
+    newBlocks.splice(insertIndex, 0, movedBlock);
+
+    setBlocks(newBlocks);
+  };
+
   const value: any = {
     blocks,
     title,
@@ -75,6 +95,7 @@ export const BlockEditorProvider = ({ children }) => {
     deleteBlock,
     addBlock,
     moveBlock,
+    moveBlockToPosition, // Add the new function
     setEditingState,
     setTitle,
     setIsEditingTitle,
@@ -86,7 +107,6 @@ export const BlockEditorProvider = ({ children }) => {
     </BlockEditorContext.Provider>
   );
 };
-
 
 export const useBlockEditor = () => {
   const context = useContext(BlockEditorContext);
