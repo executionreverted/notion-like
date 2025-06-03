@@ -185,13 +185,17 @@ export const BlockEditorProvider = ({ children }) => {
       const currentIndex = blocks.findIndex(block => block.id === blockId);
       if (currentIndex === -1) return blocks;
 
-      const clampedIndex = Math.max(0, Math.min(newIndex, blocks.length));
-      if (currentIndex === clampedIndex || currentIndex === clampedIndex - 1) return blocks;
+      // Ensure newIndex is within bounds
+      const clampedIndex = Math.max(0, Math.min(newIndex, blocks.length - 1));
+
+      // Don't move if already in the right position
+      if (currentIndex === clampedIndex) return blocks;
 
       const newBlocks = [...blocks];
       const [movedBlock] = newBlocks.splice(currentIndex, 1);
-      const insertIndex = currentIndex < clampedIndex ? clampedIndex - 1 : clampedIndex;
-      newBlocks.splice(insertIndex, 0, movedBlock);
+
+      // Insert at the correct position
+      newBlocks.splice(clampedIndex, 0, movedBlock);
 
       return newBlocks;
     });

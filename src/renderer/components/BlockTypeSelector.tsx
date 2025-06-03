@@ -15,10 +15,10 @@ import {
 interface BlockTypeSelectorProps {
   onSelect: (type: any) => void;
   onClose: () => void;
-  position: string | any;
+  position?: string | any; // Made optional since we always center now
 }
 
-export const BlockTypeSelector = ({ onSelect, onClose, position = 'center' }: BlockTypeSelectorProps) => {
+export const BlockTypeSelector = ({ onSelect, onClose }: BlockTypeSelectorProps) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
 
@@ -108,26 +108,27 @@ export const BlockTypeSelector = ({ onSelect, onClose, position = 'center' }: Bl
     );
   });
 
-  const positionClasses = position === 'center'
-    ? 'fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2'
-    : 'absolute top-full left-0 mt-2';
-
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       switch (e.key) {
         case 'Escape':
+          e.preventDefault();
+          e.stopPropagation();
           onClose();
           break;
         case 'ArrowDown':
           e.preventDefault();
+          e.stopPropagation();
           setSelectedIndex(prev => Math.min(prev + 1, filteredTypes.length - 1));
           break;
         case 'ArrowUp':
           e.preventDefault();
+          e.stopPropagation();
           setSelectedIndex(prev => Math.max(prev - 1, 0));
           break;
         case 'Enter':
           e.preventDefault();
+          e.stopPropagation();
           if (filteredTypes[selectedIndex]) {
             onSelect(filteredTypes[selectedIndex].type);
             onClose();
@@ -136,8 +137,14 @@ export const BlockTypeSelector = ({ onSelect, onClose, position = 'center' }: Bl
       }
     };
 
+    // Prevent body scroll when modal is open
+    document.body.style.overflow = 'hidden';
+
     document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = 'unset';
+    };
   }, [onClose, onSelect, filteredTypes, selectedIndex]);
 
   // Reset selected index when search changes
@@ -146,15 +153,41 @@ export const BlockTypeSelector = ({ onSelect, onClose, position = 'center' }: Bl
   }, [searchQuery]);
 
   return (
-    <div style={{ zIndex: 999 }} className="fixed inset-0 z-50">
-      {position === 'center' && (
-        <div
-          className="absolute inset-0 bg-slate-900/20 backdrop-blur-sm"
-          onClick={onClose}
-        />
-      )}
+    // Portal-like behavior - completely independent positioning
+    <div
+      className="fixed inset-0 z-[99999]"
+      style={{
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 99999,
+        width: "100vw",
+        height: "100vh"
+      }}
+    >
+      {/* Backdrop */}
+      <div
+        className="absolute w-full h-full inset-0 bg-slate-900/20 backdrop-blur-sm"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onClose();
+        }}
+      />
 
-      <div className={`${positionClasses} bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-slate-200/60 z-50 w-96 overflow-hidden animate-in slide-in-from-bottom-4 duration-300`}>
+      {/* Modal content - truly centered relative to viewport */}
+      <div
+        className="absolute bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-slate-200/60 w-96 overflow-hidden animate-in slide-in-from-bottom-4 duration-300"
+        style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          zIndex: 100000,
+          maxHeight: '80vh'
+        }}
+      >
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200/60 bg-gradient-to-r from-slate-50/80 to-transparent">
           <div className="flex items-center gap-3 mb-3">
@@ -174,6 +207,7 @@ export const BlockTypeSelector = ({ onSelect, onClose, position = 'center' }: Bl
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-3 bg-white/80 border border-slate-200 rounded-xl text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300 transition-all"
               autoFocus
+              onClick={(e) => e.stopPropagation()}
             />
           </div>
         </div>
@@ -191,7 +225,9 @@ export const BlockTypeSelector = ({ onSelect, onClose, position = 'center' }: Bl
               {filteredTypes.map(({ type, icon: Icon, label, desc, color }, index) => (
                 <button
                   key={type}
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
                     onSelect(type);
                     onClose();
                   }}

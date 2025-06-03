@@ -1,4 +1,4 @@
-// Enhanced Block.tsx with contentEditable - FIXED VERSION
+// Enhanced Block.tsx with contentEditable and fixed drag/drop - FIXED VERSION
 import { useState, useRef, useEffect } from "react";
 import { useBlockEditor } from "../contexts/BlockEditorContext";
 import {
@@ -55,6 +55,11 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
       if (block.type == 'quote') {
         newContent = newContent.slice(1, -1);
       }
+
+      if (block.type == 'list') {
+        newContent = newContent + '\n'
+      }
+
       updateBlock(block.id, newContent);
 
       // Restore cursor position after React re-render
@@ -170,7 +175,7 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
     handleContentChange();
   };
 
-  // Enhanced drag and drop (same as before)
+  // Fixed drag and drop implementation
   const handleDragStart = (e: React.DragEvent) => {
     setIsDragging(true);
     e.dataTransfer.setData('text/plain', block.id);
@@ -202,21 +207,56 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
 
+    // More precise drop zone calculation
     const rect = e.currentTarget.getBoundingClientRect();
     const midpoint = rect.top + rect.height / 2;
-    const dropIndex = e.clientY < midpoint ? index : index + 1;
-    setDragOverIndex(dropIndex);
+
+    // Determine if we're dropping before or after this block
+    if (e.clientY < midpoint) {
+      setDragOverIndex(index);
+    } else {
+      setDragOverIndex(index + 1);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    // Only clear if we're actually leaving the block area
+    const rect = e.currentTarget.getBoundingClientRect();
+    if (
+      e.clientX < rect.left ||
+      e.clientX > rect.right ||
+      e.clientY < rect.top ||
+      e.clientY > rect.bottom
+    ) {
+      setDragOverIndex(null);
+    }
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const draggedId = e.dataTransfer.getData('text/plain');
 
-    if (draggedId !== block.id && dragOverIndex !== null) {
-      moveBlockToPosition(draggedId, dragOverIndex);
+    if (draggedId && draggedId !== block.id && dragOverIndex !== null) {
+      // Find the current index of the dragged block
+      const draggedBlockIndex = blocks.findIndex((b: any) => b.id === draggedId);
+
+      if (draggedBlockIndex !== -1) {
+        let targetIndex = dragOverIndex;
+
+        // Adjust target index if dragging from before to after
+        if (draggedBlockIndex < dragOverIndex) {
+          targetIndex = dragOverIndex - 1;
+        }
+
+        // Only move if the position actually changes
+        if (targetIndex !== draggedBlockIndex && targetIndex >= 0 && targetIndex <= blocks.length) {
+          moveBlockToPosition(draggedId, targetIndex);
+        }
+      }
     }
 
     setDragOverIndex(null);
+    setIsDragging(false);
   };
 
   const getBlockIcon = (type: string) => {
@@ -371,18 +411,18 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
         onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => {
           setIsHovered(false);
-          setShowTypeSelector(false);
         }}
         onKeyDown={handleKeyDown}
         tabIndex={0}
       >
         <div className="flex items-start gap-3">
           {/* Enhanced toolbar */}
-          <div className={`flex flex-col gap-1 pt-3 transition-all duration-300 ease-out ${isHovered ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2'
+          <div style={{ minHeight: 100, height: "auto", left: -24 }} className={`absolute top-0  flex flex-col gap-1 pt-3 transition-all duration-300 ease-out ${isHovered ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2'
             }`}>
             {/* Block type indicator */}
             <div className={`flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-200 ${block.type === 'text' ? 'bg-slate-100 text-slate-500' :
@@ -437,23 +477,16 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
             {/* Add block button */}
             <div className="relative">
               <button
-                onClick={() => setShowTypeSelector(!showTypeSelector)}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setShowTypeSelector(true);
+                }}
                 className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-indigo-50 hover:text-indigo-600 text-slate-400 transition-all duration-200 hover:scale-105"
                 title="Add block below"
               >
                 <Plus size={14} />
               </button>
-
-              {showTypeSelector && (
-                <BlockTypeSelector
-                  position="center"
-                  onSelect={(type) => {
-                    addBlock(block.id, type);
-                    setShowTypeSelector(false);
-                  }}
-                  onClose={() => setShowTypeSelector(false)}
-                />
-              )}
             </div>
 
             {/* Delete button */}
@@ -497,6 +530,17 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
           <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full animate-pulse"></div>
           <div className="absolute inset-0 bg-gradient-to-r from-indigo-400 to-purple-400 rounded-full blur-sm"></div>
         </div>
+      )}
+
+      {/* Block Type Selector Modal - Always rendered at document level */}
+      {showTypeSelector && (
+        <BlockTypeSelector
+          onSelect={(type) => {
+            addBlock(block.id, type);
+            setShowTypeSelector(false);
+          }}
+          onClose={() => setShowTypeSelector(false)}
+        />
       )}
     </>
   );
