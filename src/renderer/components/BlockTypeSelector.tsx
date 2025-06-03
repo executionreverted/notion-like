@@ -1,4 +1,3 @@
-// Enhanced BlockTypeSelector.tsx
 import React, { useEffect, useState } from 'react';
 import {
   Type,
@@ -19,7 +18,7 @@ interface BlockTypeSelectorProps {
   position: string | any;
 }
 
-export const BlockTypeSelector = ({ onSelect, onClose, position = 'bottom-left' }: BlockTypeSelectorProps) => {
+export const BlockTypeSelector = ({ onSelect, onClose, position = 'center' }: BlockTypeSelectorProps) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
 

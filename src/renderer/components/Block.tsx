@@ -1,4 +1,4 @@
-// Enhanced Block.tsx with contentEditable
+// Enhanced Block.tsx with contentEditable - FIXED VERSION
 import { useState, useRef, useEffect } from "react";
 import { useBlockEditor } from "../contexts/BlockEditorContext";
 import {
@@ -51,7 +51,10 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
       const cursorOffset = range ? range.startOffset : 0;
       const focusNode = range ? range.startContainer : null;
 
-      const newContent = contentRef.current.innerText || '';
+      let newContent = contentRef.current.innerText || '';
+      if (block.type == 'quote') {
+        newContent = newContent.slice(1, -1);
+      }
       updateBlock(block.id, newContent);
 
       // Restore cursor position after React re-render
@@ -286,7 +289,7 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
 
             <div
               ref={contentRef}
-              contentEditable={block.isEditing}
+              contentEditable={true}
               suppressContentEditableWarning={true}
               onInput={handleContentChange}
               onKeyDown={handleKeyDown}
@@ -294,15 +297,6 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
               onBlur={() => setEditingState(block.id, false)}
               className="p-6 font-mono text-sm leading-relaxed text-slate-100 outline-none focus:outline-none whitespace-pre-wrap min-h-[4rem]"
               data-placeholder={isEmpty ? getPlaceholder(block.type) : ''}
-              style={{
-                ...(isEmpty && {
-                  '::before': {
-                    content: 'attr(data-placeholder)',
-                    color: '#64748b',
-                    pointerEvents: 'none'
-                  }
-                })
-              }}
             >
               {block.content}
             </div>
@@ -318,7 +312,7 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
             <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-amber-400 to-orange-400"></div>
             <div
               ref={contentRef}
-              contentEditable={block.isEditing}
+              contentEditable={true}
               suppressContentEditableWarning={true}
               onInput={handleContentChange}
               onKeyDown={handleKeyDown}
@@ -327,7 +321,7 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
               className="pl-8 pr-6 py-6 text-slate-700 italic font-medium text-xl leading-relaxed outline-none focus:outline-none"
               data-placeholder={isEmpty ? `"${getPlaceholder(block.type)}"` : ''}
             >
-              {block.content && `"${block.content}"`}
+              {block.content && !isEmpty ? `"${block.content}"` : ''}
             </div>
             {/* Quote decoration */}
             <div className="absolute top-4 right-6 text-amber-200 text-6xl font-serif leading-none opacity-30 pointer-events-none">"</div>
@@ -340,7 +334,7 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
     return (
       <div
         ref={contentRef}
-        contentEditable={block.isEditing}
+        contentEditable={true}
         suppressContentEditableWarning={true}
         onInput={handleContentChange}
         onKeyDown={handleKeyDown}
@@ -356,6 +350,9 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
 
   const BlockIcon = getBlockIcon(block.type);
 
+  // Check if block should be in editing mode (new blocks or explicitly editing)
+  const shouldShowEditor = block.isEditing || (!block.content || block.content.trim() === '');
+
   return (
     <>
       {/* Drop indicator above */}
@@ -370,7 +367,7 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
         ref={blockRef}
         className={`group relative transition-all duration-300 ease-out ${isDragging ? 'opacity-50 rotate-1 scale-[0.98] z-50' : 'opacity-100'
           } ${isHovered ? 'transform-gpu' : ''}`}
-        draggable={!block.isEditing}
+        draggable={!block.isEditing && !shouldShowEditor}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
         onDragOver={handleDragOver}
@@ -449,7 +446,7 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
 
               {showTypeSelector && (
                 <BlockTypeSelector
-                  position=""
+                  position="center"
                   onSelect={(type) => {
                     addBlock(block.id, type);
                     setShowTypeSelector(false);
@@ -474,13 +471,13 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
           {/* Enhanced block content */}
           <div className="flex-1 min-w-0">
             <div
-              className={`relative w-full rounded-2xl transition-all duration-300 ease-out ${block.isEditing
+              className={`relative w-full rounded-2xl transition-all duration-300 ease-out ${shouldShowEditor
                 ? 'bg-white shadow-2xl shadow-indigo-500/10 ring-2 ring-indigo-200/70 ring-offset-2 ring-offset-white scale-[1.01]'
                 : 'hover:bg-slate-50/50 cursor-text hover:shadow-lg hover:shadow-slate-200/50'
                 }`}
-              onClick={() => !block.isEditing && !isDragging && setEditingState(block.id, true)}
+              onClick={() => !shouldShowEditor && !isDragging && setEditingState(block.id, true)}
             >
-              {block.isEditing ? (
+              {shouldShowEditor ? (
                 <div className="p-6">
                   {renderEditableContent()}
                 </div>
