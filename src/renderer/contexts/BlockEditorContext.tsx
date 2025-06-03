@@ -97,6 +97,7 @@ export const useBlockEditor = () => {
 // Auto-resize textarea hook for seamless editing
 export const useAutoResize = (value, isEditing) => {
   const textareaRef = useRef(null);
+  const hasSetInitialCursor = useRef(false);
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -110,8 +111,12 @@ export const useAutoResize = (value, isEditing) => {
     adjustHeight();
     textarea.focus();
 
-    const length = textarea.value.length;
-    textarea.setSelectionRange(length, length);
+    // Only set cursor to end when first entering edit mode
+    if (!hasSetInitialCursor.current) {
+      const length = textarea.value.length;
+      textarea.setSelectionRange(length, length);
+      hasSetInitialCursor.current = true;
+    }
 
     const handleInput = () => adjustHeight();
     textarea.addEventListener('input', handleInput);
@@ -120,6 +125,13 @@ export const useAutoResize = (value, isEditing) => {
       textarea.removeEventListener('input', handleInput);
     };
   }, [value, isEditing]);
+
+  // Reset the cursor flag when exiting edit mode
+  useEffect(() => {
+    if (!isEditing) {
+      hasSetInitialCursor.current = false;
+    }
+  }, [isEditing]);
 
   return textareaRef;
 };
