@@ -18,6 +18,14 @@ export const BlockContent: React.FC<BlockContentProps> = ({ block }) => {
     );
   }
 
+  return (
+    <div className="prose prose-gray max-w-none">
+      <ReactMarkdown>
+        {block.content}
+      </ReactMarkdown>
+    </div>
+  )
+
   switch (block.type) {
     case 'heading':
       return (

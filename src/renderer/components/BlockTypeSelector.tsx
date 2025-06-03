@@ -33,7 +33,7 @@ export const BlockTypeSelector: React.FC<BlockTypeSelectorProps> = ({
   ];
 
   return (
-    <div className="absolute top-0 left-9 bg-white/95 backdrop-blur-xl rounded-xl shadow-2xl border border-gray-200/60 py-2 z-50 min-w-64 transform -translate-y-6">
+    <div className="absolute bottom-0 right-0 bg-white/95 backdrop-blur-xl rounded-xl shadow-2xl border border-gray-200/60 py-2 z-50 min-w-64 transform -translate-y-6">
       <div className="px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide border-b border-gray-100/80">
         Block Types
       </div>

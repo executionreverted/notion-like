@@ -152,8 +152,8 @@ export const CommandMenu: React.FC<CommandMenuProps> = ({
       ref={menuRef}
       className="absolute bg-white/95 backdrop-blur-xl rounded-xl shadow-2xl border border-gray-200/60 z-50 w-80 overflow-hidden"
       style={{
-        top: position.top + 'px',
-        left: position.left + 'px',
+        bottom: "-100%",
+        right: position.left + 'px',
       }}
     >
       <div className="px-3 py-2 border-b border-gray-100/80">

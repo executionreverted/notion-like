@@ -71,7 +71,7 @@ const BlockTypeSelector = ({
   ];
 
   return (
-    <div className="absolute top-10 left-0 bg-white/95 backdrop-blur-xl rounded-xl shadow-2xl border border-gray-200/50 py-2 z-50 min-w-64">
+    <div className="absolute bottom-0 right-0 bg-white/95 backdrop-blur-xl rounded-xl shadow-2xl border border-gray-200/50 py-2 z-50 min-w-64">
       <div className="px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide border-b border-gray-100">
         Block Types
       </div>
@@ -177,8 +177,8 @@ const SortableBlock = ({
           onBlur={() => setIsEditing(false)}
           onKeyDown={handleKeyDown}
           placeholder={getPlaceholder(block.type)}
-          className="w-full resize-none border-none outline-none bg-transparent text-gray-900 placeholder-gray-400 font-medium"
-          style={{ minHeight: '1.5rem' }}
+          className="w-full  border-none outline-none bg-transparent text-gray-900 placeholder-gray-400 font-medium"
+          style={{ minHeight: '3rem', height: "100%", overflowY: "auto" }}
           rows={block.type === 'code' ? 4 : 1}
         />
       );
@@ -191,6 +191,10 @@ const SortableBlock = ({
         </div>
       );
     }
+
+    return <ReactMarkdown>
+      {block.content}
+    </ReactMarkdown>
 
     switch (block.type) {
       case 'heading':
@@ -348,7 +352,7 @@ export const BlockEditor = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-4xl mx-auto min-h-screen flex flex-col">
         {/* Header */}
         <div className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-gray-200/50">
           <div className="px-8 py-6">
@@ -379,9 +383,9 @@ export const BlockEditor = () => {
         </div>
 
         {/* Editor */}
-        <div className="px-8 py-8">
-          <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-sm border border-gray-200/50 overflow-hidden">
-            <div className="p-8">
+        <div className="px-8 py-8 flex-grow-1 flex flex-col">
+          <div className="flex flex-col items-start pb-4 justify-start flex-grow-1 h-full bg-white/70 backdrop-blur-sm rounded-2xl shadow-sm border border-gray-200/50 overflow-hidden">
+            <div className="flex-grow-1 p-8">
               <DndContext
                 sensors={sensors}
                 collisionDetection={closestCenter}
@@ -402,15 +406,15 @@ export const BlockEditor = () => {
                 </SortableContext>
               </DndContext>
 
-              {/* Add Block Button */}
-              <button
-                onClick={() => addBlock()}
-                className="flex items-center gap-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-all duration-150 mt-6 p-3 rounded-lg w-full justify-center border-2 border-dashed border-gray-200 hover:border-gray-300"
-              >
-                <Plus size={18} />
-                <span className="font-medium">Add a block</span>
-              </button>
             </div>
+            {/* Add Block Button */}
+            <button
+              onClick={() => addBlock()}
+              className="flex items-center gap-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-all duration-150 mt-6 p-3 rounded-lg w-full justify-center border-2 border-dashed border-gray-200 hover:border-gray-300"
+            >
+              <Plus size={18} />
+              <span className="font-medium">Add a block</span>
+            </button>
           </div>
         </div>
       </div>
