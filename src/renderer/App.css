@@ -477,3 +477,59 @@ button, input, textarea, select {
     transform: scale(1.05);
   }
 }
+
+
+/* Add these styles to your App.css for contentEditable placeholders */
+
+/* ContentEditable placeholder styling */
+[contenteditable="true"]:empty:before {
+  content: attr(data-placeholder);
+  color: #94a3b8; /* slate-400 */
+  font-style: italic;
+  pointer-events: none;
+}
+
+[contenteditable="true"]:empty:focus:before {
+  content: attr(data-placeholder);
+  color: #cbd5e1; /* lighter placeholder when focused */
+}
+
+/* Ensure proper cursor behavior */
+[contenteditable="true"] {
+  cursor: text;
+}
+
+[contenteditable="true"]:focus {
+  cursor: text;
+}
+
+/* Remove browser's default contenteditable styling */
+[contenteditable="true"]:focus {
+  outline: none;
+  border: none;
+}
+
+/* Prevent unwanted formatting when pasting */
+[contenteditable="true"] * {
+  all: unset;
+  display: inline;
+  white-space: inherit;
+}
+
+/* Special handling for code blocks */
+[contenteditable="true"].code-block {
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Source Code Pro', monospace;
+  white-space: pre-wrap;
+  tab-size: 2;
+}
+
+/* Enhanced selection styling for better UX */
+[contenteditable="true"]::selection {
+  background: rgba(99, 102, 241, 0.2);
+  color: inherit;
+}
+
+/* Smooth caret animation */
+[contenteditable="true"] {
+  caret-color: #6366f1; /* indigo-500 */
+}

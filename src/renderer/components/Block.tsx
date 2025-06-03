@@ -1,6 +1,6 @@
-// Enhanced Block.tsx
-import { useState, useRef } from "react";
-import { useAutoResize, useBlockEditor } from "../contexts/BlockEditorContext";
+// Enhanced Block.tsx with contentEditable
+import { useState, useRef, useEffect } from "react";
+import { useBlockEditor } from "../contexts/BlockEditorContext";
 import {
   ChevronDown,
   ChevronUp,
@@ -24,57 +24,155 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
   const [showTypeSelector, setShowTypeSelector] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-  const textareaRef = useAutoResize(block.content, block.isEditing || false);
   const blockRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
 
-  // Enhanced keyboard handling
-  const handleKeyDown = (e: any) => {
+  // Focus and cursor management for contentEditable
+  useEffect(() => {
+    if (block.isEditing && contentRef.current && document.activeElement !== contentRef.current) {
+      contentRef.current.focus();
+
+      // Place cursor at end of content only when first entering edit mode
+      const range = document.createRange();
+      const selection = window.getSelection();
+      range.selectNodeContents(contentRef.current);
+      range.collapse(false);
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    }
+  }, [block.isEditing]);
+
+  // Handle content changes from contentEditable with cursor preservation
+  const handleContentChange = () => {
+    if (contentRef.current) {
+      // Save cursor position before updating state
+      const selection = window.getSelection();
+      const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+      const cursorOffset = range ? range.startOffset : 0;
+      const focusNode = range ? range.startContainer : null;
+
+      const newContent = contentRef.current.innerText || '';
+      updateBlock(block.id, newContent);
+
+      // Restore cursor position after React re-render
+      requestAnimationFrame(() => {
+        if (contentRef.current && focusNode && selection) {
+          try {
+            const newRange = document.createRange();
+            // Find the same text node or closest equivalent
+            const textNode = findTextNode(contentRef.current, cursorOffset);
+            if (textNode) {
+              const maxOffset = Math.min(cursorOffset, textNode.textContent?.length || 0);
+              newRange.setStart(textNode, maxOffset);
+              newRange.collapse(true);
+              selection.removeAllRanges();
+              selection.addRange(newRange);
+            }
+          } catch (e) {
+            // Fallback: place cursor at end if restoration fails
+            const range = document.createRange();
+            range.selectNodeContents(contentRef.current);
+            range.collapse(false);
+            selection.removeAllRanges();
+            selection.addRange(range);
+          }
+        }
+      });
+    }
+  };
+
+  // Helper function to find the appropriate text node for cursor positioning
+  const findTextNode = (element: Node, targetOffset: number): Text | null => {
+    let currentOffset = 0;
+
+    const walker = document.createTreeWalker(
+      element,
+      NodeFilter.SHOW_TEXT,
+      null
+    );
+
+    let node;
+    while (node = walker.nextNode()) {
+      const nodeLength = node.textContent?.length || 0;
+      if (currentOffset + nodeLength >= targetOffset) {
+        return node as Text;
+      }
+      currentOffset += nodeLength;
+    }
+
+    // Return the last text node if offset is beyond content
+    walker.currentNode = element;
+    let lastTextNode = null;
+    while (node = walker.nextNode()) {
+      lastTextNode = node;
+    }
+    return lastTextNode as Text;
+  };
+
+  // Enhanced keyboard handling for contentEditable
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
+      e.preventDefault();
       setEditingState(block.id, false);
+      contentRef.current?.blur();
     }
+
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
       setEditingState(block.id, false);
+      contentRef.current?.blur();
     }
+
     if (e.key === 'Enter' && !e.shiftKey && !['code', 'list', 'checklist'].includes(block.type)) {
       e.preventDefault();
       setEditingState(block.id, false);
+      contentRef.current?.blur();
       addBlock(block.id);
     }
-    if (e.key === 'Tab' && block.type === 'code') {
-      e.preventDefault();
-      const start = e.currentTarget.selectionStart;
-      const end = e.currentTarget.selectionEnd;
-      const value = e.currentTarget.value;
-      updateBlock(block.id, value.substring(0, start) + '  ' + value.substring(end));
-      setTimeout(() => {
-        if (textareaRef.current) {
-          textareaRef.current.selectionStart = textareaRef.current.selectionEnd = start + 2;
-        }
-      }, 0);
-    }
-    if (e.key === '/' && e.currentTarget.value === '') {
+
+    if (e.key === '/' && contentRef.current?.innerText === '') {
       e.preventDefault();
       setShowTypeSelector(true);
     }
 
-    // Arrow key navigation
-    if (e.key === 'ArrowUp' && e.metaKey && !block.isEditing) {
-      e.preventDefault();
-      if (canMoveUp) onMoveUp();
-    }
-    if (e.key === 'ArrowDown' && e.metaKey && !block.isEditing) {
-      e.preventDefault();
-      if (canMoveDown) onMoveDown();
+    // Arrow key navigation (only when not editing)
+    if (!block.isEditing) {
+      if (e.key === 'ArrowUp' && e.metaKey) {
+        e.preventDefault();
+        if (canMoveUp) onMoveUp();
+      }
+      if (e.key === 'ArrowDown' && e.metaKey) {
+        e.preventDefault();
+        if (canMoveDown) onMoveDown();
+      }
     }
   };
 
-  // Enhanced drag and drop
+  // Handle paste to preserve formatting appropriately
+  const handlePaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const text = e.clipboardData.getData('text/plain');
+
+    // Insert plain text to avoid formatting issues
+    const selection = window.getSelection();
+    if (selection?.rangeCount) {
+      const range = selection.getRangeAt(0);
+      range.deleteContents();
+      range.insertNode(document.createTextNode(text));
+      range.collapse(false);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+
+    handleContentChange();
+  };
+
+  // Enhanced drag and drop (same as before)
   const handleDragStart = (e: React.DragEvent) => {
     setIsDragging(true);
     e.dataTransfer.setData('text/plain', block.id);
     e.dataTransfer.effectAllowed = 'move';
 
-    // Custom drag image with better styling
     if (blockRef.current) {
       const dragImage = blockRef.current.cloneNode(true) as HTMLElement;
       dragImage.style.position = 'absolute';
@@ -133,41 +231,134 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
     return iconMap[type] || Type;
   };
 
-  const getPlaceholder = (type: any) => {
+  const getEditableClasses = (type: string) => {
+    const baseClasses = "outline-none focus:outline-none w-full";
+
+    switch (type) {
+      case 'heading':
+        return `${baseClasses} text-4xl font-bold text-slate-900 leading-tight py-2`;
+      case 'heading2':
+        return `${baseClasses} text-3xl font-semibold text-slate-900 leading-tight py-2`;
+      case 'heading3':
+        return `${baseClasses} text-2xl font-medium text-slate-900 leading-tight py-2`;
+      case 'code':
+        return `${baseClasses} bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-slate-100 rounded-2xl p-6 font-mono text-sm leading-relaxed whitespace-pre`;
+      case 'quote':
+        return `${baseClasses} relative overflow-hidden rounded-2xl bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50 border border-amber-200/50 pl-8 pr-6 py-6 text-slate-700 italic font-medium text-xl leading-relaxed`;
+      case 'list':
+        return `${baseClasses} py-2 text-slate-800 leading-relaxed font-medium text-lg`;
+      default:
+        return `${baseClasses} py-2 text-slate-800 leading-relaxed font-medium text-lg`;
+    }
+  };
+
+  const getPlaceholder = (type: string) => {
     const placeholders = {
       heading: 'Heading 1',
       heading2: 'Heading 2',
       heading3: 'Heading 3',
-      list: '• List item',
-      quote: 'Quote',
-      code: '// Code block',
-      checklist: '☐ To-do item',
+      list: 'List item',
+      quote: 'Quote text',
+      code: '// Code here',
+      checklist: 'To-do item',
       image: 'Image description or URL',
-      text: 'Type \'/\' for commands'
+      text: "Type '/' for commands"
     };
     return placeholders[type] || 'Type something...';
   };
 
-  const getTextareaClass = (type: any) => {
-    switch (type) {
-      case 'heading':
-        return 'text-4xl font-bold leading-tight text-slate-900';
-      case 'heading2':
-        return 'text-3xl font-semibold leading-tight text-slate-900';
-      case 'heading3':
-        return 'text-2xl font-medium leading-tight text-slate-900';
-      case 'code':
-        return 'font-mono text-sm leading-relaxed text-slate-800 bg-slate-50/50';
-      default:
-        return 'text-lg leading-relaxed text-slate-800';
+  // Render editable content with proper styling
+  const renderEditableContent = () => {
+    const isEmpty = !block.content || block.content.trim() === '';
+
+    if (block.type === 'code') {
+      return (
+        <div className="relative group my-2">
+          <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-slate-100 rounded-2xl overflow-hidden shadow-xl border border-slate-700/50">
+            {/* Code block header */}
+            <div className="flex items-center justify-between px-6 py-3 border-b border-slate-700/50">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-red-400 rounded-full"></div>
+                <div className="w-3 h-3 bg-yellow-400 rounded-full"></div>
+                <div className="w-3 h-3 bg-green-400 rounded-full"></div>
+              </div>
+            </div>
+
+            <div
+              ref={contentRef}
+              contentEditable={block.isEditing}
+              suppressContentEditableWarning={true}
+              onInput={handleContentChange}
+              onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
+              onBlur={() => setEditingState(block.id, false)}
+              className="p-6 font-mono text-sm leading-relaxed text-slate-100 outline-none focus:outline-none whitespace-pre-wrap min-h-[4rem]"
+              data-placeholder={isEmpty ? getPlaceholder(block.type) : ''}
+              style={{
+                ...(isEmpty && {
+                  '::before': {
+                    content: 'attr(data-placeholder)',
+                    color: '#64748b',
+                    pointerEvents: 'none'
+                  }
+                })
+              }}
+            >
+              {block.content}
+            </div>
+          </div>
+        </div>
+      );
     }
+
+    if (block.type === 'quote') {
+      return (
+        <div className="my-4">
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50 border border-amber-200/50">
+            <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-amber-400 to-orange-400"></div>
+            <div
+              ref={contentRef}
+              contentEditable={block.isEditing}
+              suppressContentEditableWarning={true}
+              onInput={handleContentChange}
+              onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
+              onBlur={() => setEditingState(block.id, false)}
+              className="pl-8 pr-6 py-6 text-slate-700 italic font-medium text-xl leading-relaxed outline-none focus:outline-none"
+              data-placeholder={isEmpty ? `"${getPlaceholder(block.type)}"` : ''}
+            >
+              {block.content && `"${block.content}"`}
+            </div>
+            {/* Quote decoration */}
+            <div className="absolute top-4 right-6 text-amber-200 text-6xl font-serif leading-none opacity-30 pointer-events-none">"</div>
+          </div>
+        </div>
+      );
+    }
+
+    // Default content rendering
+    return (
+      <div
+        ref={contentRef}
+        contentEditable={block.isEditing}
+        suppressContentEditableWarning={true}
+        onInput={handleContentChange}
+        onKeyDown={handleKeyDown}
+        onPaste={handlePaste}
+        onBlur={() => setEditingState(block.id, false)}
+        className={getEditableClasses(block.type)}
+        data-placeholder={isEmpty ? getPlaceholder(block.type) : ''}
+      >
+        {block.content}
+      </div>
+    );
   };
 
   const BlockIcon = getBlockIcon(block.type);
 
   return (
     <>
-      {/* Enhanced drop indicator */}
+      {/* Drop indicator above */}
       {dragOverIndex === index && (
         <div className="relative h-1 mx-4 my-3">
           <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full animate-pulse"></div>
@@ -290,19 +481,9 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
               onClick={() => !block.isEditing && !isDragging && setEditingState(block.id, true)}
             >
               {block.isEditing ? (
-                <textarea
-                  ref={textareaRef}
-                  value={block.content}
-                  onChange={(e) => updateBlock(block.id, e.target.value)}
-                  onBlur={() => setEditingState(block.id, false)}
-                  onKeyDown={handleKeyDown}
-                  placeholder={getPlaceholder(block.type)}
-                  className={`w-full p-6 border-none outline-none bg-transparent resize-none placeholder-slate-400 ${getTextareaClass(block.type)}`}
-                  style={{
-                    minHeight: '4rem',
-                    height: 'auto',
-                  }}
-                />
+                <div className="p-6">
+                  {renderEditableContent()}
+                </div>
               ) : (
                 <div className="p-6">
                   <BlockContent block={block} />
