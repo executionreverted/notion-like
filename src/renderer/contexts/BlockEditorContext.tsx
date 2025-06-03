@@ -1,39 +1,149 @@
-import { useState, useRef, useEffect, createContext, useContext } from 'react';
+// Enhanced BlockEditorContext.tsx
+import { useState, useRef, useEffect, createContext, useContext, useCallback } from 'react';
 
 // Context for managing editor state
 export const BlockEditorContext = createContext(null);
 
 export const BlockEditorProvider = ({ children }) => {
   const [blocks, setBlocks] = useState([
-    { id: '1', type: 'heading', content: 'Transform Your Writing Experience' },
-    { id: '2', type: 'text', content: 'This is what professional editing feels like. Click on any block and watch the smooth auto-resize textareas that adapt naturally to your content. No more jarring fixed-height boxes or clunky interfaces - just pure, seamless editing bliss.' },
-    { id: '3', type: 'quote', content: 'Great design is invisible - it gets out of your way and lets you focus on what matters: creating amazing content.' },
-    { id: '4', type: 'list', content: '• Seamless auto-resize textareas that feel natural\n• Professional design with modern gradients\n• Smooth animations and micro-interactions\n• Intuitive keyboard shortcuts (try Escape, Ctrl+Enter)\n• Clean, accessible interface with perfect spacing\n• Slash commands for quick block creation\n• Drag and drop to reorder blocks' },
-    { id: '5', type: 'code', content: 'const editor = new ProfessionalBlockEditor();\neditor.enableSeamlessEditing();\neditor.enableDragAndDrop();\neditor.render(); // ✨ Pure magic\n\n// Try editing this code block!\n// Notice how it grows smoothly as you type\n// You can also drag blocks to reorder them!\n// This is how editing should feel in 2024' },
+    { id: '1', type: 'heading', content: 'Welcome to Your Enhanced Editor' },
+    {
+      id: '2',
+      type: 'text',
+      content: 'Experience the next level of block-based editing with smooth animations, enhanced keyboard shortcuts, and professional design. This editor adapts to your workflow with intelligent auto-resize, smart formatting, and seamless interactions.'
+    },
+    {
+      id: '3',
+      type: 'quote',
+      content: 'Great design is not just what it looks like and feels like. Design is how it works.'
+    },
+    {
+      id: '4',
+      type: 'list',
+      content: '• Intelligent auto-resize textareas\n• Enhanced keyboard navigation (↑↓ to move blocks)\n• Smart markdown shortcuts (type # for headings)\n• Professional animations and micro-interactions\n• Auto-save functionality\n• Improved accessibility support\n• Enhanced drag & drop with visual feedback'
+    },
+    {
+      id: '5',
+      type: 'code',
+      content: '// Enhanced editor features\nconst editor = new ProfessionalBlockEditor({\n  animations: true,\n  shortcuts: true,\n  autoSave: true,\n  accessibility: true\n});\n\n// Try these shortcuts:\n// ⌘ + ↑/↓ - Move blocks\n// / - Open block selector\n// ⌘ + Enter - Exit editing\n// Escape - Cancel editing\n\neditor.render(); // ✨ Pure editing bliss'
+    },
   ]);
 
   const [title, setTitle] = useState('Professional Block Editor');
   const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [lastSaved, setLastSaved] = useState(new Date());
+  const [undoStack, setUndoStack] = useState([]);
+  const [redoStack, setRedoStack] = useState([]);
+  const autoSaveTimeoutRef = useRef(null);
 
-  const updateBlock = (id, content) => {
-    setBlocks(blocks.map(block =>
+  // Auto-save functionality
+  const saveToStorage = useCallback(() => {
+    const editorState = {
+      blocks,
+      title,
+      lastSaved: new Date().toISOString()
+    };
+    // In a real app, this would save to backend/localStorage
+    console.log('Auto-saved:', editorState);
+    setLastSaved(new Date());
+  }, [blocks, title]);
+
+  // Debounced auto-save
+  useEffect(() => {
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+
+    autoSaveTimeoutRef.current = setTimeout(() => {
+      saveToStorage();
+    }, 2000); // Save after 2 seconds of inactivity
+
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, [blocks, title, saveToStorage]);
+
+  // Enhanced undo/redo system
+  const saveToUndoStack = useCallback(() => {
+    setUndoStack(prev => [...prev.slice(-19), { blocks, title }]); // Keep last 20 states
+    setRedoStack([]); // Clear redo stack on new action
+  }, [blocks, title]);
+
+  const undo = useCallback(() => {
+    if (undoStack.length === 0) return;
+
+    const previousState = undoStack[undoStack.length - 1];
+    setRedoStack(prev => [...prev, { blocks, title }]);
+    setUndoStack(prev => prev.slice(0, -1));
+    setBlocks(previousState.blocks);
+    setTitle(previousState.title);
+  }, [undoStack, blocks, title]);
+
+  const redo = useCallback(() => {
+    if (redoStack.length === 0) return;
+
+    const nextState = redoStack[redoStack.length - 1];
+    setUndoStack(prev => [...prev, { blocks, title }]);
+    setRedoStack(prev => prev.slice(0, -1));
+    setBlocks(nextState.blocks);
+    setTitle(nextState.title);
+  }, [redoStack, blocks, title]);
+
+  // Global keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Global shortcuts
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      }
+
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        redo();
+      }
+
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault();
+        saveToStorage();
+      }
+
+      // Quick block creation
+      if ((e.metaKey || e.ctrlKey) && e.key === '/') {
+        e.preventDefault();
+        // This would trigger the block selector
+        console.log('Open block selector');
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [undo, redo, saveToStorage]);
+
+  const updateBlock = useCallback((id, content) => {
+    setBlocks(blocks => blocks.map(block =>
       block.id === id ? { ...block, content } : block
     ));
-  };
+  }, []);
 
-  const setEditingState = (id, isEditing) => {
-    setBlocks(blocks.map(block =>
+  const setEditingState = useCallback((id, isEditing) => {
+    setBlocks(blocks => blocks.map(block =>
       block.id === id ? { ...block, isEditing } : { ...block, isEditing: false }
     ));
-  };
+  }, []);
 
-  const deleteBlock = (id) => {
+  const deleteBlock = useCallback((id) => {
     if (blocks.length > 1) {
-      setBlocks(blocks.filter(block => block.id !== id));
+      saveToUndoStack();
+      setBlocks(blocks => blocks.filter(block => block.id !== id));
     }
-  };
+  }, [blocks.length, saveToUndoStack]);
 
-  const addBlock = (afterId, type = 'text') => {
+  const addBlock = useCallback((afterId, type = 'text') => {
+    saveToUndoStack();
+
     const newBlock = {
       id: Date.now().toString(),
       type,
@@ -42,63 +152,127 @@ export const BlockEditorProvider = ({ children }) => {
     };
 
     if (afterId) {
-      const index = blocks.findIndex(block => block.id === afterId);
-      const newBlocks = [...blocks];
-      newBlocks.splice(index + 1, 0, newBlock);
-      setBlocks(newBlocks);
+      setBlocks(blocks => {
+        const index = blocks.findIndex(block => block.id === afterId);
+        const newBlocks = [...blocks];
+        newBlocks.splice(index + 1, 0, newBlock);
+        return newBlocks;
+      });
     } else {
-      setBlocks([...blocks, newBlock]);
+      setBlocks(blocks => [...blocks, newBlock]);
     }
-  };
+  }, [saveToUndoStack]);
 
-  const moveBlock = (id, direction) => {
-    const currentIndex = blocks.findIndex(block => block.id === id);
-    if (
-      (direction === 'up' && currentIndex === 0) ||
-      (direction === 'down' && currentIndex === blocks.length - 1)
-    ) {
-      return;
+  const moveBlock = useCallback((id, direction) => {
+    setBlocks(blocks => {
+      const currentIndex = blocks.findIndex(block => block.id === id);
+      if (
+        (direction === 'up' && currentIndex === 0) ||
+        (direction === 'down' && currentIndex === blocks.length - 1)
+      ) {
+        return blocks;
+      }
+
+      const newBlocks = [...blocks];
+      const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+      [newBlocks[currentIndex], newBlocks[targetIndex]] = [newBlocks[targetIndex], newBlocks[currentIndex]];
+      return newBlocks;
+    });
+  }, []);
+
+  const moveBlockToPosition = useCallback((blockId, newIndex) => {
+    setBlocks(blocks => {
+      const currentIndex = blocks.findIndex(block => block.id === blockId);
+      if (currentIndex === -1) return blocks;
+
+      const clampedIndex = Math.max(0, Math.min(newIndex, blocks.length));
+      if (currentIndex === clampedIndex || currentIndex === clampedIndex - 1) return blocks;
+
+      const newBlocks = [...blocks];
+      const [movedBlock] = newBlocks.splice(currentIndex, 1);
+      const insertIndex = currentIndex < clampedIndex ? clampedIndex - 1 : clampedIndex;
+      newBlocks.splice(insertIndex, 0, movedBlock);
+
+      return newBlocks;
+    });
+  }, []);
+
+  // Enhanced block type conversion
+  const convertBlockType = useCallback((id, newType) => {
+    saveToUndoStack();
+    setBlocks(blocks => blocks.map(block =>
+      block.id === id ? { ...block, type: newType } : block
+    ));
+  }, [saveToUndoStack]);
+
+  // Duplicate block
+  const duplicateBlock = useCallback((id) => {
+    saveToUndoStack();
+    setBlocks(blocks => {
+      const index = blocks.findIndex(block => block.id === id);
+      const originalBlock = blocks[index];
+      const duplicatedBlock = {
+        ...originalBlock,
+        id: Date.now().toString(),
+        content: originalBlock.content,
+      };
+
+      const newBlocks = [...blocks];
+      newBlocks.splice(index + 1, 0, duplicatedBlock);
+      return newBlocks;
+    });
+  }, [saveToUndoStack]);
+
+  // Smart paste handling
+  const handleSmartPaste = useCallback((id, pastedContent) => {
+    // Auto-detect content type and suggest block type
+    let suggestedType = 'text';
+
+    if (pastedContent.startsWith('http') && pastedContent.includes('://')) {
+      // URL detected
+      if (pastedContent.match(/\.(jpg|jpeg|png|gif|svg|webp)$/i)) {
+        suggestedType = 'image';
+      }
+    } else if (pastedContent.startsWith('#')) {
+      suggestedType = 'heading';
+    } else if (pastedContent.startsWith('```') || pastedContent.includes('\n') && pastedContent.includes('  ')) {
+      suggestedType = 'code';
+    } else if (pastedContent.startsWith('>') || pastedContent.startsWith('"')) {
+      suggestedType = 'quote';
+    } else if (pastedContent.includes('\n-') || pastedContent.includes('\n*') || pastedContent.includes('\n•')) {
+      suggestedType = 'list';
     }
 
-    const newBlocks = [...blocks];
-    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-    [newBlocks[currentIndex], newBlocks[targetIndex]] = [newBlocks[targetIndex], newBlocks[currentIndex]];
-    setBlocks(newBlocks);
-  };
+    if (suggestedType !== 'text') {
+      convertBlockType(id, suggestedType);
+    }
 
-  // New function for drag and drop repositioning
-  const moveBlockToPosition = (blockId, newIndex) => {
-    const currentIndex = blocks.findIndex(block => block.id === blockId);
-    if (currentIndex === -1) return;
-
-    // Clamp the new index to valid bounds
-    const clampedIndex = Math.max(0, Math.min(newIndex, blocks.length));
-
-    // If trying to move to the same position, do nothing
-    if (currentIndex === clampedIndex || currentIndex === clampedIndex - 1) return;
-
-    const newBlocks = [...blocks];
-    const [movedBlock] = newBlocks.splice(currentIndex, 1);
-
-    // Adjust insert position if we removed an item before it
-    const insertIndex = currentIndex < clampedIndex ? clampedIndex - 1 : clampedIndex;
-    newBlocks.splice(insertIndex, 0, movedBlock);
-
-    setBlocks(newBlocks);
-  };
+    updateBlock(id, pastedContent);
+  }, [convertBlockType, updateBlock]);
 
   const value: any = {
     blocks,
     title,
     isEditingTitle,
+    lastSaved,
+    undoStack,
+    redoStack,
     updateBlock,
     deleteBlock,
     addBlock,
     moveBlock,
-    moveBlockToPosition, // Add the new function
+    moveBlockToPosition,
     setEditingState,
     setTitle,
     setIsEditingTitle,
+    convertBlockType,
+    duplicateBlock,
+    handleSmartPaste,
+    undo,
+    redo,
+    saveToStorage,
+    canUndo: undoStack.length > 0,
+    canRedo: redoStack.length > 0,
   };
 
   return (
@@ -114,7 +288,7 @@ export const useBlockEditor = () => {
   return context;
 };
 
-// Auto-resize textarea hook for seamless editing
+// Enhanced auto-resize textarea hook
 export const useAutoResize = (value, isEditing) => {
   const textareaRef = useRef(null);
   const hasSetInitialCursor = useRef(false);
@@ -125,28 +299,41 @@ export const useAutoResize = (value, isEditing) => {
 
     const adjustHeight = () => {
       textarea.style.height = 'auto';
-      textarea.style.height = `${Math.max(40, textarea.scrollHeight)}px`;
+      textarea.style.height = `${Math.max(60, textarea.scrollHeight)}px`;
     };
 
+    // Initial setup
     adjustHeight();
     textarea.focus();
 
-    // Only set cursor to end when first entering edit mode
+    // Enhanced cursor positioning
     if (!hasSetInitialCursor.current) {
       const length = textarea.value.length;
       textarea.setSelectionRange(length, length);
       hasSetInitialCursor.current = true;
     }
 
-    const handleInput = () => adjustHeight();
+    const handleInput = () => {
+      adjustHeight();
+    };
+
+    const handlePaste = (e) => {
+      // Allow default paste, then adjust height
+      setTimeout(() => {
+        adjustHeight();
+      }, 0);
+    };
+
     textarea.addEventListener('input', handleInput);
+    textarea.addEventListener('paste', handlePaste);
 
     return () => {
       textarea.removeEventListener('input', handleInput);
+      textarea.removeEventListener('paste', handlePaste);
     };
   }, [value, isEditing]);
 
-  // Reset the cursor flag when exiting edit mode
+  // Reset cursor flag when exiting edit mode
   useEffect(() => {
     if (!isEditing) {
       hasSetInitialCursor.current = false;
@@ -154,4 +341,41 @@ export const useAutoResize = (value, isEditing) => {
   }, [isEditing]);
 
   return textareaRef;
+};
+
+// Custom hook for keyboard shortcuts
+export const useKeyboardShortcuts = (blockId, blockType) => {
+  const { convertBlockType } = useBlockEditor();
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Block-specific shortcuts when editing
+      if (e.target.tagName === 'TEXTAREA') {
+        // Quick formatting shortcuts
+        if ((e.metaKey || e.ctrlKey) && e.key === '1') {
+          e.preventDefault();
+          convertBlockType(blockId, 'heading');
+        }
+        if ((e.metaKey || e.ctrlKey) && e.key === '2') {
+          e.preventDefault();
+          convertBlockType(blockId, 'heading2');
+        }
+        if ((e.metaKey || e.ctrlKey) && e.key === '3') {
+          e.preventDefault();
+          convertBlockType(blockId, 'heading3');
+        }
+        if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'C') {
+          e.preventDefault();
+          convertBlockType(blockId, 'code');
+        }
+        if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'Q') {
+          e.preventDefault();
+          convertBlockType(blockId, 'quote');
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [blockId, convertBlockType]);
 };
