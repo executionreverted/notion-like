@@ -1,4 +1,4 @@
-// Enhanced Block.tsx - Always-editable contentEditable like Notion
+// Fixed Block.tsx - Horizontal toolbar on bottom right with tolerance
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useBlockEditor } from "../contexts/BlockEditorContext";
 import {
@@ -13,8 +13,7 @@ import {
   Quote,
   List,
   Image,
-  CheckCircle2,
-  MoreHorizontal
+  CheckCircle2
 } from "lucide-react";
 import { BlockTypeSelector } from "./BlockTypeSelector";
 
@@ -30,15 +29,18 @@ interface BlockProps {
 export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDown }: BlockProps) => {
   const { updateBlock, deleteBlock, addBlock, blocks, moveBlockToPosition, convertBlockType } = useBlockEditor();
   const [showTypeSelector, setShowTypeSelector] = useState(false);
-  const [showOptions, setShowOptions] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [isFocused, setIsFocused] = useState(false);
   const [isEmpty, setIsEmpty] = useState(!block.content || block.content.trim() === '');
+  const [showToolbar, setShowToolbar] = useState(false);
 
   const blockRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
   const updateTimeoutRef = useRef<NodeJS.Timeout>();
+  const dragHandleRef = useRef<HTMLButtonElement>(null);
+  const hoverTimeoutRef = useRef<NodeJS.Timeout>();
 
   // Debounced content update
   const debouncedUpdate = useCallback((content: string) => {
@@ -230,7 +232,6 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
   // Focus handlers
   const handleFocus = useCallback(() => {
     setIsFocused(true);
-    setShowOptions(false);
   }, []);
 
   const handleBlur = useCallback(() => {
@@ -242,11 +243,22 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
     }
   }, [block.id, updateBlock]);
 
-  // Drag handlers
+  // Fixed drag handlers
   const handleDragStart = useCallback((e: React.DragEvent) => {
+    // Only allow drag from the drag handle
+    if (e.target !== dragHandleRef.current) {
+      e.preventDefault();
+      return;
+    }
+
     setIsDragging(true);
     e.dataTransfer.setData('text/plain', block.id);
     e.dataTransfer.effectAllowed = 'move';
+
+    // Better drag image
+    if (blockRef.current) {
+      e.dataTransfer.setDragImage(blockRef.current, 20, 20);
+    }
   }, [block.id]);
 
   const handleDragEnd = useCallback(() => {
@@ -260,10 +272,35 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
 
     if (!blockRef.current) return;
 
+    // Don't show drop indicator on the dragged element itself
+    const draggedId = e.dataTransfer.getData('text/plain');
+    if (draggedId === block.id) {
+      setDragOverIndex(null);
+      return;
+    }
+
+    // Auto-scroll when near edges
+    const viewportHeight = window.innerHeight;
+    const scrollThreshold = 100;
+
+    if (e.clientY < scrollThreshold) {
+      window.scrollBy(0, -10);
+    } else if (e.clientY > viewportHeight - scrollThreshold) {
+      window.scrollBy(0, 10);
+    }
+
+    // More sensitive drop zone detection
     const rect = blockRef.current.getBoundingClientRect();
-    const midpoint = rect.top + rect.height / 2;
-    setDragOverIndex(e.clientY < midpoint ? index : index + 1);
-  }, [index]);
+    const dropZoneHeight = Math.min(rect.height / 3, 30); // Max 30px drop zone
+
+    if (e.clientY < rect.top + dropZoneHeight) {
+      setDragOverIndex(index);
+    } else if (e.clientY > rect.bottom - dropZoneHeight) {
+      setDragOverIndex(index + 1);
+    } else {
+      setDragOverIndex(null);
+    }
+  }, [index, block.id]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -273,15 +310,62 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
       const draggedIndex = blocks.findIndex((b: any) => b.id === draggedId);
       let targetIndex = dragOverIndex;
 
-      if (draggedIndex < dragOverIndex) targetIndex--;
-      if (targetIndex !== draggedIndex && targetIndex >= 0) {
+      // Adjust target index if dragging down
+      if (draggedIndex < targetIndex) {
+        targetIndex--;
+      }
+
+      if (targetIndex !== draggedIndex && targetIndex >= 0 && targetIndex <= blocks.length) {
         moveBlockToPosition(draggedId, targetIndex);
       }
     }
 
     setDragOverIndex(null);
-    setIsDragging(false);
   }, [block.id, blocks, dragOverIndex, moveBlockToPosition]);
+
+  // Mouse handlers with tolerance
+  const handleMouseEnter = useCallback(() => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+    }
+    setShowToolbar(true);
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    // Add delay before hiding toolbar
+    hoverTimeoutRef.current = setTimeout(() => {
+      if (!isFocused) {
+        setShowToolbar(false);
+      }
+    }, 300); // 300ms tolerance
+  }, [isFocused]);
+
+  // Check if mouse is in the tolerance area
+  const isInToleranceArea = useCallback((e: MouseEvent) => {
+    if (!blockRef.current) return false;
+
+    const rect = blockRef.current.getBoundingClientRect();
+    const tolerance = 20; // px
+
+    return (
+      e.clientX >= rect.left - tolerance &&
+      e.clientX <= rect.right + tolerance &&
+      e.clientY >= rect.top - tolerance &&
+      e.clientY <= rect.bottom + tolerance
+    );
+  }, []);
+
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current);
+      }
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Get block styling based on type
   const getBlockStyles = useCallback(() => {
@@ -431,118 +515,100 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
 
   return (
     <>
-      {/* Drop indicator */}
+      {/* Drop indicator above */}
       {dragOverIndex === index && (
-        <div className="h-0.5 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full mx-4 my-2 animate-pulse" />
+        <div className="h-1 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full mx-6 my-1 animate-pulse shadow-sm" />
       )}
 
       <div
         ref={blockRef}
         data-block-id={block.id}
-        className={`group relative transition-all duration-200 ${isDragging ? 'opacity-50' : 'opacity-100'
+        className={`group relative transition-all duration-200 ${isDragging ? 'opacity-30 scale-95 rotate-1' : 'opacity-100'
           }`}
-        draggable={!isFocused}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
       >
-        {/* Hover toolbar */}
-        <div className={`absolute left-[-60px] top-1 flex flex-col gap-1 transition-all duration-200 ${isFocused || showOptions ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-          }`}>
+        {/* Horizontal toolbar at bottom right */}
+        <div
+          ref={toolbarRef}
+          className={`absolute bottom-2 right-2 flex items-center gap-1 bg-white/95 backdrop-blur-sm rounded-xl shadow-lg border border-slate-200/60 p-1 transition-all duration-200 z-10 ${showToolbar || isFocused ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 pointer-events-none'
+            }`}
+        >
           {/* Block type indicator */}
-          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-medium ${block.type === 'text' ? 'bg-slate-100 text-slate-500' :
+          <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-medium ${block.type === 'text' ? 'bg-slate-100 text-slate-500' :
             block.type.startsWith('heading') ? 'bg-indigo-100 text-indigo-600' :
               block.type === 'code' ? 'bg-slate-800 text-white' :
                 block.type === 'quote' ? 'bg-amber-100 text-amber-600' :
                   'bg-emerald-100 text-emerald-600'
             }`}>
-            <BlockIcon size={14} />
+            <BlockIcon size={12} />
           </div>
 
           {/* Drag handle */}
           <button
-            className="w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center cursor-grab active:cursor-grabbing"
-            onMouseDown={(e) => e.preventDefault()}
+            ref={dragHandleRef}
+            draggable
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            className="w-7 h-7 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center cursor-grab active:cursor-grabbing"
+            title="Drag to reorder"
           >
-            <GripVertical size={14} />
+            <GripVertical size={12} />
           </button>
 
-          {/* Options button */}
+          {/* Add block */}
           <button
-            onClick={() => setShowOptions(!showOptions)}
-            className="w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center"
+            onClick={() => setShowTypeSelector(true)}
+            className="w-7 h-7 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center"
+            title="Add block"
           >
-            <MoreHorizontal size={14} />
+            <Plus size={12} />
           </button>
 
-          {/* Options menu */}
-          {showOptions && (
-            <div className="absolute left-10 top-0 bg-white rounded-xl shadow-lg border border-slate-200 py-2 z-50 min-w-[180px]">
-              <button
-                onClick={() => {
-                  setShowTypeSelector(true);
-                  setShowOptions(false);
-                }}
-                className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2"
-              >
-                <Plus size={14} />
-                Add block below
-              </button>
+          {/* Move up */}
+          <button
+            onClick={onMoveUp}
+            disabled={!canMoveUp}
+            className="w-7 h-7 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Move up"
+          >
+            <ChevronUp size={12} />
+          </button>
 
-              <button
-                onClick={() => {
-                  onMoveUp();
-                  setShowOptions(false);
-                }}
-                disabled={!canMoveUp}
-                className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2 disabled:opacity-50"
-              >
-                <ChevronUp size={14} />
-                Move up
-              </button>
+          {/* Move down */}
+          <button
+            onClick={onMoveDown}
+            disabled={!canMoveDown}
+            className="w-7 h-7 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Move down"
+          >
+            <ChevronDown size={12} />
+          </button>
 
-              <button
-                onClick={() => {
-                  onMoveDown();
-                  setShowOptions(false);
-                }}
-                disabled={!canMoveDown}
-                className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2 disabled:opacity-50"
-              >
-                <ChevronDown size={14} />
-                Move down
-              </button>
-
-              {blocks.length > 1 && (
-                <>
-                  <div className="h-px bg-slate-200 my-1" />
-                  <button
-                    onClick={() => {
-                      deleteBlock(block.id);
-                      setShowOptions(false);
-                    }}
-                    className="w-full px-3 py-2 text-left text-sm hover:bg-red-50 text-red-600 flex items-center gap-2"
-                  >
-                    <X size={14} />
-                    Delete
-                  </button>
-                </>
-              )}
-            </div>
+          {/* Delete */}
+          {blocks.length > 1 && (
+            <button
+              onClick={() => deleteBlock(block.id)}
+              className="w-7 h-7 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-600 flex items-center justify-center"
+              title="Delete block"
+            >
+              <X size={12} />
+            </button>
           )}
         </div>
 
         {/* Block content */}
-        <div className={`rounded-2xl p-6 transition-all duration-200 ${isFocused ? 'bg-white' : 'hover:bg-slate-50/50'
+        <div className={`rounded-2xl p-6 transition-all duration-200 ${isFocused ? 'bg-white shadow-sm' : 'hover:bg-slate-50/50'
           }`}>
           {renderBlockContent()}
         </div>
       </div>
 
-      {/* Drop indicator after */}
+      {/* Drop indicator below */}
       {dragOverIndex === index + 1 && (
-        <div className="h-0.5 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full mx-4 my-2 animate-pulse" />
+        <div className="h-1 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full mx-6 my-1 animate-pulse shadow-sm" />
       )}
 
       {/* Block type selector */}
@@ -553,14 +619,6 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
             setShowTypeSelector(false);
           }}
           onClose={() => setShowTypeSelector(false)}
-        />
-      )}
-
-      {/* Click away handler for options */}
-      {showOptions && (
-        <div
-          className="fixed inset-0 z-40"
-          onClick={() => setShowOptions(false)}
         />
       )}
     </>
