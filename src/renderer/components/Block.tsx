@@ -1,4 +1,4 @@
-// Inline editing Block.tsx - No HTML structure changes, like Notion
+// Fixed Block.tsx - Uncontrolled contentEditable during editing
 import { useState, useRef, useEffect } from "react";
 import { useBlockEditor } from "../contexts/BlockEditorContext";
 import {
@@ -16,7 +16,6 @@ import {
   CheckCircle2
 } from "lucide-react";
 import { BlockTypeSelector } from "./BlockTypeSelector";
-import { BlockContent } from "./BlockContent";
 
 export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDown }: any) => {
   const { updateBlock, deleteBlock, addBlock, blocks, moveBlockToPosition } = useBlockEditor();
@@ -26,147 +25,107 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
   const [isEditing, setIsEditing] = useState(false);
   const blockRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const isEditingRef = useRef(false);
 
-  // Cursor position utilities
-  const getCaretPosition = (element: HTMLElement) => {
-    let caretPos = 0;
-    const sel = window.getSelection();
-    if (sel && sel.rangeCount) {
-      const range = sel.getRangeAt(0);
-      const preCaretRange = range.cloneRange();
-      preCaretRange.selectNodeContents(element);
-      preCaretRange.setEnd(range.endContainer, range.endOffset);
-      caretPos = preCaretRange.toString().length;
-    }
-    return caretPos;
-  };
+  // Sync editing state
+  useEffect(() => {
+    isEditingRef.current = isEditing;
+  }, [isEditing]);
 
-  const setCaretPosition = (element: HTMLElement, pos: number) => {
-    const range = document.createRange();
-    const sel = window.getSelection();
-    let charIndex = 0;
-
-    const walker = document.createTreeWalker(
-      element,
-      NodeFilter.SHOW_TEXT,
-      null
-    );
-
-    let node;
-    while (node = walker.nextNode()) {
-      const nextCharIndex = charIndex + (node.textContent?.length || 0);
-      if (pos <= nextCharIndex) {
-        range.setStart(node, pos - charIndex);
-        range.collapse(true);
-        sel?.removeAllRanges();
-        sel?.addRange(range);
-        return;
-      }
-      charIndex = nextCharIndex;
-    }
-  };
-
-  // Debounced cursor restoration
-  const cursorTimeoutRef = useRef<number | null>(null);
-
-  // Handle content changes with debounced cursor preservation
-  const handleInput = (e: any) => {
-    if (contentRef.current) {
-      const newContent = contentRef.current.innerText || '';
-      const isEnterKey = e.inputType === 'insertParagraph' || e.inputType === 'insertLineBreak';
-
-      if (isEnterKey) {
-        updateBlock(block.id, newContent);
-        requestAnimationFrame(() => {
-          if (contentRef.current && document.activeElement === contentRef.current) {
-            const range = document.createRange();
-            const selection = window.getSelection();
-            range.selectNodeContents(contentRef.current);
-            range.collapse(false);
-            selection?.removeAllRanges();
-            selection?.addRange(range);
-          }
-        });
-      } else {
-        const cursorPos = getCaretPosition(contentRef.current);
-        updateBlock(block.id, newContent);
-
-        // Clear previous timeout
-        if (cursorTimeoutRef.current) {
-          clearTimeout(cursorTimeoutRef.current);
-        }
-
-        // Debounce cursor restoration
-        cursorTimeoutRef.current = window.setTimeout(() => {
-          if (contentRef.current && document.activeElement === contentRef.current) {
-            setCaretPosition(contentRef.current, cursorPos);
-          }
-        }, 10);
+  // Only update DOM when not editing to prevent cursor jumps
+  useEffect(() => {
+    if (!isEditingRef.current && contentRef.current) {
+      if (contentRef.current.textContent !== block.content) {
+        contentRef.current.textContent = block.content || '';
       }
     }
+  }, [block.content]);
+
+  // Handle content changes - no React state updates during editing
+  const handleInput = () => {
+    // Don't trigger any React updates during editing
+    // Content will be saved on blur
   };
 
-  // Handle keyboard shortcuts
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       e.preventDefault();
-      setIsEditing(false);
-      contentRef.current?.blur();
+      stopEditing();
       return;
     }
 
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
-      setIsEditing(false);
-      contentRef.current?.blur();
+      stopEditing();
       return;
     }
 
     // For headings, Enter creates new block
     if (e.key === 'Enter' && !e.shiftKey && ['heading', 'heading2', 'heading3'].includes(block.type)) {
       e.preventDefault();
+      const content = contentRef.current?.textContent || '';
+      updateBlock(block.id, content);
       setIsEditing(false);
-      addBlock(block.id, 'text');
+      setTimeout(() => addBlock(block.id, 'text'), 0);
+      return;
+    }
+
+
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      stopEditing();
       return;
     }
 
     // Show type selector with /
-    if (e.key === '/' && contentRef.current?.innerText === '') {
+    if (e.key === '/' && contentRef.current?.textContent === '') {
       e.preventDefault();
       setShowTypeSelector(true);
       return;
     }
   };
 
-  // Handle paste
   const handlePaste = (e: React.ClipboardEvent) => {
     e.preventDefault();
     const text = e.clipboardData.getData('text/plain');
     document.execCommand('insertText', false, text);
   };
 
-  // Start editing
   const startEditing = () => {
     setIsEditing(true);
     setTimeout(() => {
       if (contentRef.current) {
         contentRef.current.focus();
+        // Set cursor to end
         const range = document.createRange();
         const selection = window.getSelection();
-        range.selectNodeContents(contentRef.current);
-        range.collapse(false);
+        if (contentRef.current.childNodes.length > 0) {
+          const lastNode = contentRef.current.childNodes[contentRef.current.childNodes.length - 1];
+          if (lastNode.nodeType === Node.TEXT_NODE) {
+            range.setStart(lastNode, lastNode.textContent?.length || 0);
+          } else {
+            range.setStart(contentRef.current, contentRef.current.childNodes.length);
+          }
+        } else {
+          range.setStart(contentRef.current, 0);
+        }
+        range.collapse(true);
         selection?.removeAllRanges();
         selection?.addRange(range);
       }
     }, 0);
   };
 
-  // Stop editing
   const stopEditing = () => {
+    if (contentRef.current) {
+      const content = contentRef.current.textContent || '';
+      updateBlock(block.id, content);
+    }
     setIsEditing(false);
+    contentRef.current?.blur();
   };
 
-  // Drag handlers (simplified)
+  // Drag handlers
   const handleDragStart = (e: React.DragEvent) => {
     setIsDragging(true);
     e.dataTransfer.setData('text/plain', block.id);
@@ -207,12 +166,11 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
     return icons[type] || Type;
   };
 
-  // Render inline editable content
   const renderContent = () => {
     const isEmpty = !block.content || block.content.trim() === '';
     const placeholder = isEmpty ? getPlaceholder() : '';
 
-    // Common props for all editable elements
+    // Common props - key difference: no value prop, let DOM manage content
     const commonProps = {
       ref: contentRef,
       contentEditable: isEditing,
@@ -232,8 +190,9 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
           <h1
             {...commonProps}
             className="text-4xl font-bold text-slate-900 leading-tight py-2 outline-none"
+            dangerouslySetInnerHTML={!isEditing ? { __html: block.content || '' } : undefined}
           >
-            {block.content || ''}
+            {isEditing ? undefined : null}
           </h1>
         );
 
@@ -242,8 +201,9 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
           <h2
             {...commonProps}
             className="text-3xl font-semibold text-slate-900 leading-tight py-2 outline-none"
+            dangerouslySetInnerHTML={!isEditing ? { __html: block.content || '' } : undefined}
           >
-            {block.content || ''}
+            {isEditing ? undefined : null}
           </h2>
         );
 
@@ -252,8 +212,9 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
           <h3
             {...commonProps}
             className="text-2xl font-medium text-slate-900 leading-tight py-2 outline-none"
+            dangerouslySetInnerHTML={!isEditing ? { __html: block.content || '' } : undefined}
           >
-            {block.content || ''}
+            {isEditing ? undefined : null}
           </h3>
         );
 
@@ -271,8 +232,9 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
               <pre
                 {...commonProps}
                 className="p-6 font-mono text-sm leading-relaxed text-slate-100 outline-none whitespace-pre-wrap min-h-[4rem]"
+                dangerouslySetInnerHTML={!isEditing ? { __html: block.content || '' } : undefined}
               >
-                {block.content || ''}
+                {isEditing ? undefined : null}
               </pre>
             </div>
           </div>
@@ -286,8 +248,9 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
               <blockquote
                 {...commonProps}
                 className="pl-8 pr-6 py-6 text-slate-700 italic font-medium text-xl leading-relaxed outline-none"
+                dangerouslySetInnerHTML={!isEditing ? { __html: block.content || '' } : undefined}
               >
-                {block.content || ''}
+                {isEditing ? undefined : null}
               </blockquote>
               <div className="absolute top-4 right-6 text-amber-200 text-6xl font-serif leading-none opacity-30 pointer-events-none">"</div>
             </div>
@@ -300,22 +263,14 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
             <div
               {...commonProps}
               className="py-2 text-slate-800 leading-relaxed font-medium text-lg outline-none whitespace-pre-wrap"
-            >
-              {block.content || ''}
-            </div>
+            />
           );
         } else {
-          // Display mode with proper bullet formatting
           const items = block.content ? block.content.split('\n').filter(line => line.trim()) : [];
           return (
-            <div
-              className="py-2 cursor-pointer"
-              onClick={startEditing}
-            >
+            <div className="py-2 cursor-pointer" onClick={startEditing}>
               {items.length === 0 ? (
-                <div className="text-slate-400 font-medium py-2">
-                  {placeholder}
-                </div>
+                <div className="text-slate-400 font-medium py-2"></div>
               ) : (
                 items.map((item, i) => (
                   <div key={i} className="flex items-start gap-3 py-1">
@@ -335,14 +290,13 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
           <div
             {...commonProps}
             className="py-2 text-slate-800 leading-relaxed font-medium text-lg outline-none whitespace-pre-wrap min-h-[2rem]"
+            dangerouslySetInnerHTML={!isEditing ? { __html: block.content || '' } : undefined}
           >
-            {block.content || ''}
+            {isEditing ? undefined : null}
           </div>
         );
     }
   };
-
-
 
   const getPlaceholder = () => {
     const placeholders = {
