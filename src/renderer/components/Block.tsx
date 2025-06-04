@@ -1,4 +1,4 @@
-// Fixed Block.tsx - Horizontal toolbar on bottom right with tolerance
+// Updated Block.tsx - Integrated with ChecklistBlock
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useBlockEditor } from "../contexts/BlockEditorContext";
 import {
@@ -16,6 +16,7 @@ import {
   CheckCircle2
 } from "lucide-react";
 import { BlockTypeSelector } from "./BlockTypeSelector";
+import { ChecklistBlock } from "./ChecklistBlock";
 
 interface BlockProps {
   block: any;
@@ -54,7 +55,7 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
 
   // Initialize content when component mounts or block changes
   useEffect(() => {
-    if (contentRef.current && contentRef.current.textContent !== block.content) {
+    if (block.type !== 'checklist' && contentRef.current && contentRef.current.textContent !== block.content) {
       contentRef.current.textContent = block.content || '';
       setIsEmpty(!block.content || block.content.trim() === '');
     }
@@ -124,6 +125,12 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
       if (beforeSpace === '-' || beforeSpace === '*') {
         e.preventDefault();
         convertBlockType(block.id, 'list');
+        contentRef.current!.textContent = '';
+        return;
+      }
+      if (beforeSpace === '[]') {
+        e.preventDefault();
+        convertBlockType(block.id, 'checklist');
         contentRef.current!.textContent = '';
         return;
       }
@@ -236,12 +243,12 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
 
   const handleBlur = useCallback(() => {
     setIsFocused(false);
-    // Final update on blur
-    if (contentRef.current) {
+    // Final update on blur for non-checklist blocks
+    if (block.type !== 'checklist' && contentRef.current) {
       const content = contentRef.current.textContent || '';
       updateBlock(block.id, content);
     }
-  }, [block.id, updateBlock]);
+  }, [block.id, block.type, updateBlock]);
 
   // Fixed drag handlers
   const handleDragStart = useCallback((e: React.DragEvent) => {
@@ -340,21 +347,6 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
     }, 300); // 300ms tolerance
   }, [isFocused]);
 
-  // Check if mouse is in the tolerance area
-  const isInToleranceArea = useCallback((e: MouseEvent) => {
-    if (!blockRef.current) return false;
-
-    const rect = blockRef.current.getBoundingClientRect();
-    const tolerance = 20; // px
-
-    return (
-      e.clientX >= rect.left - tolerance &&
-      e.clientX <= rect.right + tolerance &&
-      e.clientY >= rect.top - tolerance &&
-      e.clientY <= rect.bottom + tolerance
-    );
-  }, []);
-
   // Cleanup timeouts on unmount
   useEffect(() => {
     return () => {
@@ -396,6 +388,7 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
       quote: 'Quote',
       code: '// Code',
       list: 'List item',
+      checklist: 'Todo list',
       text: "Type '/' for commands"
     };
     return placeholders[block.type] || "Type something...";
@@ -414,6 +407,18 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
 
   // Handle special rendering for different block types
   const renderBlockContent = () => {
+    // Special handling for checklist blocks
+    if (block.type === 'checklist') {
+      return (
+        <ChecklistBlock
+          block={block}
+          isFocused={isFocused}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
+        />
+      );
+    }
+
     const sharedProps = {
       ref: contentRef,
       contentEditable: true,
@@ -541,7 +546,8 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
             block.type.startsWith('heading') ? 'bg-indigo-100 text-indigo-600' :
               block.type === 'code' ? 'bg-slate-800 text-white' :
                 block.type === 'quote' ? 'bg-amber-100 text-amber-600' :
-                  'bg-emerald-100 text-emerald-600'
+                  block.type === 'checklist' ? 'bg-emerald-100 text-emerald-600' :
+                    'bg-emerald-100 text-emerald-600'
             }`}>
             <BlockIcon size={12} />
           </div>
