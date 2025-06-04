@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Type,
   List,
@@ -152,11 +153,12 @@ export const BlockTypeSelector = ({ onSelect, onClose }: BlockTypeSelectorProps)
     setSelectedIndex(0);
   }, [searchQuery]);
 
-  return (
-    // Portal-like behavior - completely independent positioning
+  return createPortal(
+    // Portal renders directly to document.body, bypassing all parent containers
     <div
       className="fixed inset-0 z-[99999]"
       style={{
+        position: 'fixed',
         top: 0,
         left: 0,
         right: 0,
@@ -275,6 +277,7 @@ export const BlockTypeSelector = ({ onSelect, onClose }: BlockTypeSelectorProps)
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body // Render directly to document.body
   );
 };
