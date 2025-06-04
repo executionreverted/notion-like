@@ -1,4 +1,4 @@
-// ChecklistBlock.tsx - Interactive todo list with JSON storage
+// ChecklistBlock.tsx - Interactive todo list with JSON storage and drag & drop
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useBlockEditor } from '../contexts/BlockEditorContext';
 import { Plus, X, Edit3, Check, GripVertical } from 'lucide-react';
@@ -27,6 +27,8 @@ export const ChecklistBlock = ({ block, isFocused, onFocus, onBlur }: ChecklistB
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
 
   // Parse block data - handle both old format and new JSON format
@@ -179,18 +181,75 @@ export const ChecklistBlock = ({ block, isFocused, onFocus, onBlur }: ChecklistB
     }, 150);
   }, [editingId, saveEdit]);
 
-  const moveTodo = useCallback((todoId: string, direction: 'up' | 'down') => {
+  const moveTodoToPosition = useCallback((todoId: string, newIndex: number) => {
     const currentIndex = checklistData.todos.findIndex(todo => todo.id === todoId);
-    if (currentIndex === -1) return;
+    if (currentIndex === -1 || currentIndex === newIndex) return;
 
-    const newIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-    if (newIndex < 0 || newIndex >= checklistData.todos.length) return;
-
+    const clampedIndex = Math.max(0, Math.min(newIndex, checklistData.todos.length - 1));
     const newTodos = [...checklistData.todos];
-    [newTodos[currentIndex], newTodos[newIndex]] = [newTodos[newIndex], newTodos[currentIndex]];
+    const [movedTodo] = newTodos.splice(currentIndex, 1);
+    newTodos.splice(clampedIndex, 0, movedTodo);
 
     updateChecklistData({ todos: newTodos });
   }, [checklistData, updateChecklistData]);
+
+  // Drag and drop handlers
+  const handleDragStart = useCallback((e: React.DragEvent, todoId: string) => {
+    setDraggingId(todoId);
+    e.dataTransfer.setData('text/plain', todoId);
+    e.dataTransfer.effectAllowed = 'move';
+  }, []);
+
+  const handleDragEnd = useCallback(() => {
+    setDraggingId(null);
+    setDragOverIndex(null);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+
+    const draggedId = e.dataTransfer.getData('text/plain') || draggingId;
+    if (!draggedId || draggedId === checklistData.todos[index]?.id) {
+      setDragOverIndex(null);
+      return;
+    }
+
+    // Get the element being dragged over
+    const target = e.currentTarget as HTMLElement;
+    const rect = target.getBoundingClientRect();
+    const dropZoneHeight = Math.min(rect.height / 2, 20);
+
+    if (e.clientY < rect.top + dropZoneHeight) {
+      setDragOverIndex(index);
+    } else if (e.clientY > rect.bottom - dropZoneHeight) {
+      setDragOverIndex(index + 1);
+    } else {
+      setDragOverIndex(null);
+    }
+  }, [draggingId, checklistData.todos]);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    const draggedId = e.dataTransfer.getData('text/plain');
+
+    if (draggedId && dragOverIndex !== null) {
+      const draggedIndex = checklistData.todos.findIndex(todo => todo.id === draggedId);
+      let targetIndex = dragOverIndex;
+
+      // Adjust target index if dragging down
+      if (draggedIndex < targetIndex) {
+        targetIndex--;
+      }
+
+      if (targetIndex !== draggedIndex && targetIndex >= 0 && targetIndex <= checklistData.todos.length) {
+        moveTodoToPosition(draggedId, targetIndex);
+      }
+    }
+
+    setDragOverIndex(null);
+    setDraggingId(null);
+  }, [dragOverIndex, checklistData.todos, moveTodoToPosition]);
 
   const completedCount = checklistData.todos.filter(todo => todo.completed).length;
   const totalCount = checklistData.todos.length;
@@ -234,98 +293,116 @@ export const ChecklistBlock = ({ block, isFocused, onFocus, onBlur }: ChecklistB
       {/* Todo items */}
       <div className="space-y-2">
         {checklistData.todos.map((todo, index) => (
-          <div
-            key={todo.id}
-            className="group flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50/80 transition-all duration-200"
-            onMouseEnter={() => setHoveredId(todo.id)}
-            onMouseLeave={() => setHoveredId(null)}
-          >
-            {/* Drag handle */}
-            <button
-              className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-all cursor-grab active:cursor-grabbing"
-              title="Drag to reorder"
-            >
-              <GripVertical size={14} />
-            </button>
+          <div key={todo.id}>
+            {/* Drop indicator above */}
+            {dragOverIndex === index && (
+              <div className="h-0.5 bg-gradient-to-r from-emerald-500 to-green-500 rounded-full mx-3 my-1 animate-pulse shadow-sm" />
+            )}
 
-            {/* Checkbox */}
-            <button
-              onClick={() => toggleTodo(todo.id)}
-              className={`flex-shrink-0 w-5 h-5 rounded-lg border-2 transition-all cursor-pointer flex items-center justify-center shadow-sm hover:scale-105 ${todo.completed
-                ? 'bg-emerald-500 border-emerald-500 text-white'
-                : 'border-slate-300 bg-white hover:border-emerald-400'
+            <div
+              draggable
+              onDragStart={(e) => handleDragStart(e, todo.id)}
+              onDragEnd={handleDragEnd}
+              onDragOver={(e) => handleDragOver(e, index)}
+              onDrop={handleDrop}
+              className={`group flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50/80 transition-all duration-200 ${draggingId === todo.id ? 'opacity-30 scale-95 rotate-1' : 'opacity-100'
                 }`}
+              onMouseEnter={() => setHoveredId(todo.id)}
+              onMouseLeave={() => setHoveredId(null)}
             >
-              {todo.completed && (
-                <Check size={12} className="text-white" />
-              )}
-            </button>
+              {/* Drag handle */}
+              <button
+                className="opacity-0 group-hover:opacity-100 w-6 h-6 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-all cursor-grab active:cursor-grabbing"
+                title="Drag to reorder"
+                onMouseDown={(e) => e.stopPropagation()} // Prevent text selection
+              >
+                <GripVertical size={14} />
+              </button>
 
-            {/* Todo text / edit input */}
-            <div className="flex-1 min-w-0">
-              {editingId === todo.id ? (
-                <input
-                  ref={editInputRef}
-                  type="text"
-                  value={editText}
-                  onChange={(e) => setEditText(e.target.value)}
-                  onKeyDown={handleEditKeyDown}
-                  onBlur={handleEditBlur}
-                  className="w-full px-2 py-1 text-lg font-medium text-slate-800 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400"
-                  placeholder="Enter todo text..."
-                />
-              ) : (
-                <div
-                  onClick={() => startEdit(todo)}
-                  className={`text-lg font-medium cursor-text px-2 py-1 rounded transition-all ${todo.completed
-                    ? 'text-slate-500 line-through'
-                    : 'text-slate-800 hover:bg-white hover:shadow-sm'
-                    }`}
-                >
-                  {todo.text || 'Click to edit...'}
-                </div>
-              )}
-            </div>
+              {/* Checkbox */}
+              <button
+                onClick={() => toggleTodo(todo.id)}
+                className={`flex-shrink-0 w-5 h-5 rounded-lg border-2 transition-all cursor-pointer flex items-center justify-center shadow-sm hover:scale-105 ${todo.completed
+                  ? 'bg-emerald-500 border-emerald-500 text-white'
+                  : 'border-slate-300 bg-white hover:border-emerald-400'
+                  }`}
+              >
+                {todo.completed && (
+                  <Check size={12} className="text-white" />
+                )}
+              </button>
 
-            {/* Controls */}
-            <div className={`flex items-center gap-1 transition-all duration-200 ${hoveredId === todo.id || editingId === todo.id ? 'opacity-100' : 'opacity-0'
-              }`}>
-              {editingId === todo.id ? (
-                <>
-                  <button
-                    onClick={saveEdit}
-                    className="w-7 h-7 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-600 flex items-center justify-center"
-                    title="Save"
-                  >
-                    <Check size={12} />
-                  </button>
-                  <button
-                    onClick={cancelEdit}
-                    className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center"
-                    title="Cancel"
-                  >
-                    <X size={12} />
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
+              {/* Todo text / edit input */}
+              <div className="flex-1 min-w-0">
+                {editingId === todo.id ? (
+                  <input
+                    ref={editInputRef}
+                    type="text"
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                    onKeyDown={handleEditKeyDown}
+                    onBlur={handleEditBlur}
+                    className="w-full px-2 py-1 text-lg font-medium text-slate-800 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400"
+                    placeholder="Enter todo text..."
+                  />
+                ) : (
+                  <div
                     onClick={() => startEdit(todo)}
-                    className="w-7 h-7 rounded-lg hover:bg-slate-200 text-slate-500 hover:text-slate-700 flex items-center justify-center"
-                    title="Edit"
+                    className={`text-lg font-medium cursor-text px-2 py-1 rounded transition-all ${todo.completed
+                      ? 'text-slate-500 line-through'
+                      : 'text-slate-800 hover:bg-white hover:shadow-sm'
+                      }`}
                   >
-                    <Edit3 size={12} />
-                  </button>
-                  <button
-                    onClick={() => deleteTodo(todo.id)}
-                    className="w-7 h-7 rounded-lg hover:bg-red-50 text-slate-500 hover:text-red-600 flex items-center justify-center"
-                    title="Delete"
-                  >
-                    <X size={12} />
-                  </button>
-                </>
-              )}
+                    {todo.text || 'Click to edit...'}
+                  </div>
+                )}
+              </div>
+
+              {/* Controls */}
+              <div className={`flex items-center gap-1 transition-all duration-200 ${hoveredId === todo.id || editingId === todo.id ? 'opacity-100' : 'opacity-0'
+                }`}>
+                {editingId === todo.id ? (
+                  <>
+                    <button
+                      onClick={saveEdit}
+                      className="w-7 h-7 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-600 flex items-center justify-center"
+                      title="Save"
+                    >
+                      <Check size={12} />
+                    </button>
+                    <button
+                      onClick={cancelEdit}
+                      className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center"
+                      title="Cancel"
+                    >
+                      <X size={12} />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => startEdit(todo)}
+                      className="w-7 h-7 rounded-lg hover:bg-slate-200 text-slate-500 hover:text-slate-700 flex items-center justify-center"
+                      title="Edit"
+                    >
+                      <Edit3 size={12} />
+                    </button>
+                    <button
+                      onClick={() => deleteTodo(todo.id)}
+                      className="w-7 h-7 rounded-lg hover:bg-red-50 text-slate-500 hover:text-red-600 flex items-center justify-center"
+                      title="Delete"
+                    >
+                      <X size={12} />
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
+
+            {/* Drop indicator below last item */}
+            {dragOverIndex === index + 1 && (
+              <div className="h-0.5 bg-gradient-to-r from-emerald-500 to-green-500 rounded-full mx-3 my-1 animate-pulse shadow-sm" />
+            )}
           </div>
         ))}
       </div>
