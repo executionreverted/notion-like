@@ -511,15 +511,11 @@ button, input, textarea, select {
 
 /* Prevent unwanted formatting when pasting */
 [contenteditable="true"] * {
-  all: unset;
-  display: inline;
-  white-space: inherit;
 }
 
 /* Special handling for code blocks */
 [contenteditable="true"].code-block {
   font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Source Code Pro', monospace;
-  white-space: pre-wrap;
   tab-size: 2;
 }
 
