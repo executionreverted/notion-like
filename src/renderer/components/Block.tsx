@@ -119,7 +119,11 @@ export const Block = ({ block, index, onMoveUp, onMoveDown, canMoveUp, canMoveDo
   const stopEditing = () => {
     if (contentRef.current) {
       const content = contentRef.current.textContent || '';
-      updateBlock(block.id, content);
+      if (content) {
+        updateBlock(block.id, content);
+      } else {
+        deleteBlock(block.id)
+      }
     }
     setIsEditing(false);
     contentRef.current?.blur();
